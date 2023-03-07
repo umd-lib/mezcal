@@ -6,6 +6,7 @@ from threading import current_thread
 
 from PIL import Image
 from codetiming import Timer
+from filelock import FileLock
 
 from mezcal.config import STORAGE_DIR, DirectoryLayout, STORAGE_LAYOUT, TIMER_LOG_FORMAT
 
@@ -38,12 +39,19 @@ class MezzanineFile:
         else:
             raise RuntimeError('Must provide one of "local_path" or "repo_path" keyword arguments')
 
+        self.lock_path = self.path.parent / '.image.jpg.lock'
+
     def __str__(self):
         return str(self.path)
 
     @property
     def exists(self) -> bool:
         return self.path.exists()
+
+    @property
+    def lock(self):
+        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+        return FileLock(self.lock_path)
 
     def create(self, fh):
         with Timer(
