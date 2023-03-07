@@ -1,0 +1,10 @@
+*.pyc
+.env
+.venv
+image_cache
+.dockerignore
+.gitignore
+.git
+*.iml
+Dockerfile
+*.egg-info

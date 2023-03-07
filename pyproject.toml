@@ -1,0 +1,7 @@
+[project]
+name = "mezcal"
+description = "Mezzanine Caching and Access Layer Web Application"
+version = "1.0.0-dev"
+
+[project.scripts]
+mezcal = "mezcal.server:run"
