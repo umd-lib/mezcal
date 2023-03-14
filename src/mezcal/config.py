@@ -17,6 +17,7 @@ JWT_TOKEN = os.environ.get('JWT_TOKEN')
 REPO_BASE_URL = os.environ.get('REPO_BASE_URL')
 STORAGE_DIR = Path.cwd() / os.environ.get('STORAGE_DIR')
 STORAGE_LAYOUT = DirectoryLayout[os.environ.get('STORAGE_LAYOUT', 'BASIC').upper()]
+MAX_IMAGE_PIXELS = int(os.environ.get('MAX_IMAGE_PIXELS', 0))
 
 TIMER_LOG_FORMAT = 'Time to {name}: {milliseconds:.3f} ms'
 LOCK_TIMEOUT = 30

@@ -8,9 +8,19 @@ from PIL import Image
 from codetiming import Timer
 from filelock import FileLock
 
-from mezcal.config import STORAGE_DIR, DirectoryLayout, STORAGE_LAYOUT, TIMER_LOG_FORMAT
+from mezcal.config import STORAGE_DIR, DirectoryLayout, STORAGE_LAYOUT, TIMER_LOG_FORMAT, MAX_IMAGE_PIXELS
 
 logger = logging.getLogger(__name__)
+
+# set a different max pixel size than the default
+# leave MAX_IMAGE_PIXELS at 0 to use the default
+if MAX_IMAGE_PIXELS > 0:
+    # positive numbers mean set a limit
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+elif MAX_IMAGE_PIXELS < 0:
+    # negative numbers mean no limit
+    logger.warning('MAX_IMAGE_PIXELS is set to "no limit". Only use with origin images from a trusted source.')
+    Image.MAX_IMAGE_PIXELS = None
 
 
 def get_local_dir(repo_path: Path | str, layout: DirectoryLayout = DirectoryLayout.BASIC) -> Path:
