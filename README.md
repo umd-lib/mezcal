@@ -38,9 +38,17 @@ STORAGE_DIR=image_cache
 # storage directory layout
 # allowed values are "basic", "md5_encoded", and "md5_encoded_pairtree"
 STORAGE_LAYOUT=basic
+# maximum pixel size of an image;
+# default is 0, which lets PIL use its default;
+# set to a positive number to change the maximum size,
+# or set to a negative number to set no limit
+MAX_IMAGE_PIXELS=0 
 # enable debugging and hot reloading when run via "flask run"
 FLASK_DEBUG=1
 ```
+
+For further information about `MAX_IMAGE_PIXELS`, see the
+[Pillow 5.0.0 Release Notes]
 
 ### Running
 
@@ -110,3 +118,4 @@ docker run -d -p 5000:5000 \
 
 [pyenv]: https://github.com/pyenv/pyenv
 [waitress]: https://pypi.org/project/waitress/
+[Pillow 5.0.0 Release Notes]: https://github.com/python-pillow/Pillow/blob/fdbd719da4c77c7e23e2e9e9b71d0d177f2d3369/docs/releasenotes/5.0.0.rst#decompression-bombs-now-raise-exceptions
