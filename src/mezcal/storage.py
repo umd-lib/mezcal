@@ -72,6 +72,10 @@ class MezzanineFile:
             try:
                 img = Image.open(fh)
                 self.path.parent.mkdir(parents=True, exist_ok=True)
+                # convert to RGB if the source image is RGB-Alpha or Palette
+                if img.mode in ('RGBA', 'P'):
+                    logger.debug(f'Converting image from "{img.mode}" to "RGB"')
+                    img = img.convert('RGB')
                 img.save(self.path)
             except Exception as e:
                 logger.error(str(e))
