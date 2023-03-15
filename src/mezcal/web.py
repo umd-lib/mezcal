@@ -1,4 +1,5 @@
 import logging
+import os
 from http import HTTPStatus
 from threading import current_thread
 
@@ -6,15 +7,22 @@ from codetiming import Timer
 from filelock import Timeout
 from flask import Flask, send_file, request, url_for, redirect, abort
 
-from mezcal.config import REPO_BASE_URL, TIMER_LOG_FORMAT, LOCK_TIMEOUT
-from mezcal.http import OriginResource, NotAnImageError
-from mezcal.storage import MezzanineFile
+from mezcal.config import TIMER_LOG_FORMAT
+from mezcal.http import OriginRepository, NotAnImageError, HTTPBearerAuth
+from mezcal.storage import LocalStorage, DirectoryLayout
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s:%(name)s:%(threadName)s:%(message)s')
 logging.getLogger('PIL').setLevel(logging.INFO)
 logging.getLogger('filelock').setLevel(logging.INFO)
 
 app = Flask(__name__)
+local_storage = LocalStorage(
+    storage_dir=os.environ.get('STORAGE_DIR', ''),
+    layout=DirectoryLayout[os.environ.get('STORAGE_LAYOUT', 'BASIC').upper()],
+)
+REPO_BASE_URL = os.environ.get('REPO_BASE_URL')
+JWT_TOKEN = os.environ.get('JWT_TOKEN')
+LOCK_TIMEOUT = 30
 
 
 @app.route('/')
@@ -38,14 +46,15 @@ def resource(repo_path):
         logger=app.logger.info,
         text=TIMER_LOG_FORMAT
     ):
-        local_file = MezzanineFile(repo_path=repo_path)
+        local_file = local_storage.get_file(repo_path)
         try:
             with local_file.lock.acquire(timeout=LOCK_TIMEOUT):
                 if not local_file.exists:
                     app.logger.debug(f'No local copy exists for /{repo_path} (local file path: {local_file})')
-                    origin_resource = OriginResource(repo_path)
+                    origin_repo = OriginRepository(REPO_BASE_URL)
+                    authenticator = HTTPBearerAuth(JWT_TOKEN)
                     try:
-                        response = origin_resource.get()
+                        response = origin_repo.get(repo_path, auth=authenticator)
                         local_file.create(response.raw)
                     except NotAnImageError:
                         abort(HTTPStatus.BAD_REQUEST, description='Requested resource is not an image')
@@ -66,7 +75,7 @@ def resource(repo_path):
 
 @app.route('/images/<path:repo_path>', methods=['DELETE'])
 def delete_resource(repo_path):
-    local_file = MezzanineFile(repo_path=repo_path)
+    local_file = local_storage.get_file(repo_path)
 
     try:
         with local_file.lock.acquire(timeout=LOCK_TIMEOUT):

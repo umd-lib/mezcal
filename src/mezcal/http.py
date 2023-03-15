@@ -5,7 +5,7 @@ import requests
 from codetiming import Timer
 from requests.auth import AuthBase
 
-from mezcal.config import REPO_BASE_URL, JWT_TOKEN, TIMER_LOG_FORMAT
+from mezcal.config import TIMER_LOG_FORMAT
 
 logger = logging.getLogger(__name__)
 
@@ -19,19 +19,19 @@ class HTTPBearerAuth(AuthBase):
         return r
 
 
-class OriginResource:
-    def __init__(self, repo_path: str):
-        self.repo_path = repo_path
+class OriginRepository:
+    def __init__(self, base_url: str):
+        self.base_url = base_url
 
-    def get(self) -> requests.Response:
+    def get(self, repo_path: str, auth=None) -> requests.Response:
         with Timer(
-            name=f'request origin image {self.repo_path} in {current_thread().name}',
+            name=f'request origin image {repo_path} in {current_thread().name}',
             logger=logger.info,
             text=TIMER_LOG_FORMAT
         ):
-            url = REPO_BASE_URL + self.repo_path
+            url = self.base_url + repo_path
             logger.debug(f'Requesting from {url}')
-            response = requests.get(url, auth=HTTPBearerAuth(JWT_TOKEN), stream=True)
+            response = requests.get(url, auth=auth, stream=True)
             if response.ok:
                 logger.debug(f'Received {response.status_code} {response.reason} response')
                 logger.debug(f'Response headers: {response.headers}')

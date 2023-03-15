@@ -1,5 +1,6 @@
 import logging
 import os
+from enum import Enum
 from hashlib import md5
 from pathlib import Path
 from threading import current_thread
@@ -8,9 +9,17 @@ from PIL import Image
 from codetiming import Timer
 from filelock import FileLock
 
-from mezcal.config import STORAGE_DIR, DirectoryLayout, STORAGE_LAYOUT, TIMER_LOG_FORMAT, MAX_IMAGE_PIXELS
+from mezcal.config import TIMER_LOG_FORMAT
 
 logger = logging.getLogger(__name__)
+MAX_IMAGE_PIXELS = int(os.environ.get('MAX_IMAGE_PIXELS', 0))
+
+
+class DirectoryLayout(Enum):
+    BASIC = 1
+    MD5_ENCODED = 2
+    MD5_ENCODED_PAIRTREE = 3
+
 
 # set a different max pixel size than the default
 # leave MAX_IMAGE_PIXELS at 0 to use the default
@@ -23,32 +32,33 @@ elif MAX_IMAGE_PIXELS < 0:
     Image.MAX_IMAGE_PIXELS = None
 
 
-def get_local_dir(repo_path: Path | str, layout: DirectoryLayout = DirectoryLayout.BASIC) -> Path:
-    match layout:
-        case DirectoryLayout.BASIC:
-            # same directory structure as the repository
-            return STORAGE_DIR / repo_path
-        case DirectoryLayout.MD5_ENCODED:
-            # directories named by md5-encoding the repository path
-            encoded_path = md5(str(repo_path).encode()).hexdigest()
-            return STORAGE_DIR / encoded_path
-        case DirectoryLayout.MD5_ENCODED_PAIRTREE:
-            # directories named by md5-encoding the repository path, with pairtree elements
-            encoded_path = md5(str(repo_path).encode()).hexdigest()
-            pairtree = [str(encoded_path)[n:n + 2] for n in range(0, 6, 2)]
-            return STORAGE_DIR / os.path.join(*pairtree) / encoded_path
+class LocalStorage:
+    def __init__(self, storage_dir: Path | str = '', layout: DirectoryLayout = DirectoryLayout.BASIC):
+        self.storage_dir = Path.cwd() / storage_dir
+        self.layout = layout
+
+    def get_dir(self, repo_path: Path | str) -> Path:
+        match self.layout:
+            case DirectoryLayout.BASIC:
+                # same directory structure as the repository
+                return self.storage_dir / repo_path
+            case DirectoryLayout.MD5_ENCODED:
+                # directories named by md5-encoding the repository path
+                encoded_path = md5(str(repo_path).encode()).hexdigest()
+                return self.storage_dir / encoded_path
+            case DirectoryLayout.MD5_ENCODED_PAIRTREE:
+                # directories named by md5-encoding the repository path, with pairtree elements
+                encoded_path = md5(str(repo_path).encode()).hexdigest()
+                pairtree = [str(encoded_path)[n:n + 2] for n in range(0, 6, 2)]
+                return self.storage_dir / os.path.join(*pairtree) / encoded_path
+
+    def get_file(self, repo_path: str) -> 'MezzanineFile':
+        return MezzanineFile(self.get_dir(repo_path) / 'image.jpg')
 
 
 class MezzanineFile:
-    def __init__(self, local_path: Path = None, repo_path: str = None):
-        if local_path is not None:
-            self.path = local_path
-        elif repo_path is not None:
-            local_dir = get_local_dir(repo_path, STORAGE_LAYOUT)
-            self.path = local_dir / 'image.jpg'
-        else:
-            raise RuntimeError('Must provide one of "local_path" or "repo_path" keyword arguments')
-
+    def __init__(self, path: Path = None):
+        self.path = path
         self.lock_path = self.path.parent / '.image.jpg.lock'
 
     def __str__(self):
