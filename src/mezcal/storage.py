@@ -59,7 +59,7 @@ class LocalStorage:
 class MezzanineFile:
     def __init__(self, path: Path = None):
         self.path = path
-        self.lock_path = self.path.parent / '.image.jpg.lock'
+        self.lock_path = Path(f'{self.path.parent}.lock')
 
     def __str__(self):
         return str(self.path)

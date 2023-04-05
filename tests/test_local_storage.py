@@ -34,7 +34,7 @@ def test_get_file():
 def test_get_file_lock(tmp_path):
     local_storage = LocalStorage(tmp_path)
     file = local_storage.get_file('bar/1')
-    assert str(file.lock_path) == str(tmp_path / 'bar/1/.image.jpg.lock')
+    assert str(file.lock_path) == str(tmp_path / 'bar/1.lock')
     lock = file.lock
     assert isinstance(lock, FileLock)
 
