@@ -1,22 +1,20 @@
 import logging
+from enum import Enum
 from threading import current_thread
 
 import requests
 from codetiming import Timer
-from requests.auth import AuthBase
 
 from mezcal.config import TIMER_LOG_FORMAT
 
 logger = logging.getLogger(__name__)
 
 
-class HTTPBearerAuth(AuthBase):
-    def __init__(self, token):
-        self.token = token
-
-    def __call__(self, r):
-        r.headers['Authorization'] = f'Bearer {self.token}'
-        return r
+class RepositoryAuthType(Enum):
+    NONE = 0
+    BASIC = 1
+    JWT_TOKEN = 2
+    JWT_SECRET = 3
 
 
 class OriginRepository:

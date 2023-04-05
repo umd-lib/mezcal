@@ -2,22 +2,50 @@ import logging
 import os
 from http import HTTPStatus
 from threading import current_thread
+from typing import Optional
 
 from codetiming import Timer
 from filelock import Timeout
 from flask import Flask, send_file, request, url_for, redirect, abort
+from requests.auth import HTTPBasicAuth, AuthBase
+from requests_jwtauth import HTTPBearerAuth, JWTSecretAuth
 
 from mezcal.config import TIMER_LOG_FORMAT
-from mezcal.http import OriginRepository, NotAnImageError, HTTPBearerAuth
-from mezcal.storage import LocalStorage, DirectoryLayout
+from mezcal.http import OriginRepository, NotAnImageError, RepositoryAuthType
+from mezcal.storage import LocalStorage
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s:%(name)s:%(threadName)s:%(message)s')
 logging.getLogger('PIL').setLevel(logging.INFO)
 logging.getLogger('filelock').setLevel(logging.INFO)
 
-REPO_BASE_URL = os.environ.get('REPO_BASE_URL')
-JWT_TOKEN = os.environ.get('JWT_TOKEN')
 LOCK_TIMEOUT = 30
+
+
+def get_authenticator(authentication_type: RepositoryAuthType) -> Optional[AuthBase]:
+    """Return a new Requests authenticator as determined by the authentication_type parameter.
+
+    Configuration values for the authenticators, if any, are taken from environment variables.
+    Raises a RuntimeError if a required environment variable is not set."""
+
+    try:
+        match authentication_type:
+            case RepositoryAuthType.NONE:
+                return None
+            case RepositoryAuthType.BASIC:
+                return HTTPBasicAuth(os.environ['REPO_USERNAME'], os.environ['REPO_PASSWORD'])
+            case RepositoryAuthType.JWT_TOKEN:
+                return HTTPBearerAuth(os.environ['JWT_TOKEN'])
+            case RepositoryAuthType.JWT_SECRET:
+                return JWTSecretAuth(
+                    secret=os.environ['JWT_SECRET'],
+                    claims={
+                        'sub': 'mezcal',
+                        'iss': 'fcrepo',
+                        'role': 'fedoraAdmin',
+                    }
+                )
+    except KeyError as e:
+        raise RuntimeError(f'Environment variable {e} is not set') from e
 
 
 def create_app(local_storage: LocalStorage, origin_repo: OriginRepository) -> Flask:
@@ -48,9 +76,9 @@ def create_app(local_storage: LocalStorage, origin_repo: OriginRepository) -> Fl
                 with local_file.lock.acquire(timeout=LOCK_TIMEOUT):
                     if not local_file.exists:
                         app.logger.debug(f'No local copy exists for /{repo_path} (local file path: {local_file})')
-                        authenticator = HTTPBearerAuth(JWT_TOKEN)
+                        auth_type = RepositoryAuthType[os.environ.get("AUTH_TYPE", "NONE")]
                         try:
-                            response = origin_repo.get(repo_path, auth=authenticator)
+                            response = origin_repo.get(repo_path, auth=get_authenticator(auth_type))
                             local_file.create(response.raw)
                         except NotAnImageError:
                             abort(HTTPStatus.BAD_REQUEST, description='Requested resource is not an image')
