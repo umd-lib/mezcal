@@ -10,6 +10,12 @@ from filelock import FileLock
 from mezcal.storage import LocalStorage, DirectoryLayout
 
 
+def test_unknown_directory_layout():
+    with pytest.raises(RuntimeError) as e_info:
+        _local_storage = LocalStorage(layout='foo')
+    assert str(e_info.value) == "'FOO' is not a recognized storage layout"
+
+
 @pytest.mark.parametrize(
     ('layout', 'expected'),
     [

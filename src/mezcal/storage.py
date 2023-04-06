@@ -33,9 +33,15 @@ elif MAX_IMAGE_PIXELS < 0:
 
 
 class LocalStorage:
-    def __init__(self, storage_dir: Path | str = '', layout: DirectoryLayout = DirectoryLayout.BASIC):
+    def __init__(self, storage_dir: Path | str = '', layout: DirectoryLayout | str = DirectoryLayout.BASIC):
         self.storage_dir = Path.cwd() / storage_dir
-        self.layout = layout
+        if isinstance(layout, str):
+            try:
+                self.layout = DirectoryLayout[layout.upper()]
+            except KeyError as e:
+                raise RuntimeError(f'{e} is not a recognized storage layout')
+        else:
+            self.layout = layout
 
     def get_dir(self, repo_path: Path | str) -> Path:
         match self.layout:
