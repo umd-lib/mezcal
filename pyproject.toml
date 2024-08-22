@@ -3,7 +3,22 @@ name = "mezcal"
 description = "Mezzanine Caching and Access Layer Web Application"
 version = "1.1.0-dev"
 dependencies = [
-    "requests_jwtauth"
+    "codetiming",
+    "filelock",
+    "flask",
+    "pillow",
+    "python-dotenv",
+    "requests",
+    "requests-jwtauth",
+    "waitress",
+]
+
+[project.optional-dependencies]
+test = [
+    "pycodestyle",
+    "pytest",
+    "pytest-cov",
+    "pytest-datadir",
 ]
 
 [project.scripts]
