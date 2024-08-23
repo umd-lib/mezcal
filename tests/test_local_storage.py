@@ -1,4 +1,5 @@
 import io
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -45,31 +46,48 @@ def test_get_file_lock(tmp_path):
     assert isinstance(lock, FileLock)
 
 
-def test_image_no_convert(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    ('mode', 'expected_convert_calls', 'expected_save_calls'),
+    [
+        # valid modes for writing JPEG
+        ('RGB', 0, 1),
+        # modes that require conversion
+        ('RGBA', 1, 1),
+        ('I;16', 1, 1),
+    ]
+)
+def test_image_convert_mock(monkeypatch, tmp_path, mode, expected_convert_calls, expected_save_calls):
     mock_fh = MagicMock(spec=io.FileIO)
     mock_image = MagicMock(spec=Image)
-    mock_image.mode = 'RGB'
-    monkeypatch.setattr(PIL.Image, 'open', lambda *_: mock_image)
-
-    local_storage = LocalStorage(tmp_path)
-    file = local_storage.get_file('bar/1')
-    file.create(mock_fh)
-    assert mock_image.convert.call_count == 0
-    assert mock_image.save.call_count == 1
-
-
-def test_image_convert(monkeypatch, tmp_path):
-    mock_fh = MagicMock(spec=io.FileIO)
-    mock_image = MagicMock(spec=Image)
-    mock_image.mode = 'RGBA'
+    mock_image.mode = mode
     mock_image.convert = MagicMock(return_value=mock_image)
+    mock_image.point = MagicMock(return_value=mock_image)
     monkeypatch.setattr(PIL.Image, 'open', lambda *_: mock_image)
 
     local_storage = LocalStorage(tmp_path)
     file = local_storage.get_file('bar/1')
     file.create(mock_fh)
-    assert mock_image.convert.call_count == 1
-    assert mock_image.save.call_count == 1
+    assert mock_image.convert.call_count == expected_convert_calls
+    assert mock_image.save.call_count == expected_save_calls
+
+
+def test_image_convert(datadir: Path, tmp_path: Path, caplog):
+    caplog.set_level(logging.DEBUG)
+    local_storage = LocalStorage(tmp_path)
+    file = local_storage.get_file('ex/1')
+    with (datadir / '16-bit.tif').open(mode='rb') as fh:
+        file.create(fh)
+    assert file.exists
+    assert 'Converting image from "I;16" to "L"' in [r.message for r in caplog.records]
+
+
+def test_image_convert_failure(datadir: Path, tmp_path: Path):
+    local_storage = LocalStorage(tmp_path)
+    file = local_storage.get_file('ex/1')
+    with (datadir / 'invalid.tif').open(mode='rb') as fh:
+        with pytest.raises(RuntimeError):
+            file.create(fh)
+    assert not file.exists
 
 
 def test_image_failure(monkeypatch, tmp_path):
@@ -96,7 +114,7 @@ def test_create_and_delete(tmp_path, datadir):
     assert not file.exists
 
 
-def test_delete_non_existent(tmp_path, datadir):
+def test_delete_non_existent(tmp_path):
     local_storage = LocalStorage(tmp_path)
     file = local_storage.get_file('bar/1')
     assert not file.exists
@@ -104,7 +122,7 @@ def test_delete_non_existent(tmp_path, datadir):
     assert not file.exists
 
 
-def test_delete_error(monkeypatch, tmp_path, datadir):
+def test_delete_error(monkeypatch, tmp_path):
     local_storage = LocalStorage(tmp_path)
     file = local_storage.get_file('bar/1')
     mock_rmdir = MagicMock(side_effect=OSError)

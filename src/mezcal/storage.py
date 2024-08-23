@@ -62,6 +62,9 @@ class LocalStorage:
         return MezzanineFile(self.get_dir(repo_path) / 'image.jpg')
 
 
+SUPPORTED_JPEG_MODES = ('L', 'RGB', 'CMYK')
+
+
 class MezzanineFile:
     def __init__(self, path: Path = None):
         self.path = path
@@ -88,10 +91,31 @@ class MezzanineFile:
             try:
                 img = Image.open(fh)
                 self.path.parent.mkdir(parents=True, exist_ok=True)
-                # convert to RGB if the source image is RGB-Alpha or Palette
-                if img.mode in ('RGBA', 'P'):
-                    logger.debug(f'Converting image from "{img.mode}" to "RGB"')
-                    img = img.convert('RGB')
+
+                if img.mode not in SUPPORTED_JPEG_MODES:
+                    logger.info(f'Source has mode "{img.mode}" that is not supported by JPEG; will attempt to convert')
+                    match img.mode:
+                        case 'RGBA' | 'P':
+                            # convert to RGB if the source image is RGB-Alpha or Palette
+                            logger.debug(f'Converting image from "{img.mode}" to "RGB"')
+                            img = img.convert('RGB')
+                        case 'I;16':
+                            # 16-bit TIFF needs special handling
+                            # the point function given scales the 16-bit pixel
+                            # values down to 8-bit (which is the max that JPEG
+                            # supports) by dividing by 256 (i.e., 2^8)
+                            # then the image can be safely rendered as grayscale
+                            # (mode "L") JPEG. Without the division by 256,
+                            # all the pixel values will likely be over 256,
+                            # resulting in an all-white image
+                            # see also: https://stackoverflow.com/a/43980135
+                            logger.debug(f'Converting image from "{img.mode}" to "L"')
+                            img = img.point(lambda i: i / 256).convert('L')
+                        case _:
+                            raise RuntimeError(
+                                f'Cannot convert from image mode "{img.mode}" to one of: {SUPPORTED_JPEG_MODES}'
+                            )
+
                 img.save(self.path)
             except Exception as e:
                 logger.error(str(e))
