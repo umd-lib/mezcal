@@ -1,5 +1,6 @@
 import logging
 import os
+from enum import Enum
 from hashlib import md5
 from pathlib import Path
 from threading import current_thread
@@ -8,9 +9,17 @@ from PIL import Image
 from codetiming import Timer
 from filelock import FileLock
 
-from mezcal.config import STORAGE_DIR, DirectoryLayout, STORAGE_LAYOUT, TIMER_LOG_FORMAT, MAX_IMAGE_PIXELS
+from mezcal.config import TIMER_LOG_FORMAT
 
 logger = logging.getLogger(__name__)
+MAX_IMAGE_PIXELS = int(os.environ.get('MAX_IMAGE_PIXELS', 0))
+
+
+class DirectoryLayout(Enum):
+    BASIC = 1
+    MD5_ENCODED = 2
+    MD5_ENCODED_PAIRTREE = 3
+
 
 # set a different max pixel size than the default
 # leave MAX_IMAGE_PIXELS at 0 to use the default
@@ -23,33 +32,43 @@ elif MAX_IMAGE_PIXELS < 0:
     Image.MAX_IMAGE_PIXELS = None
 
 
-def get_local_dir(repo_path: Path | str, layout: DirectoryLayout = DirectoryLayout.BASIC) -> Path:
-    match layout:
-        case DirectoryLayout.BASIC:
-            # same directory structure as the repository
-            return STORAGE_DIR / repo_path
-        case DirectoryLayout.MD5_ENCODED:
-            # directories named by md5-encoding the repository path
-            encoded_path = md5(str(repo_path).encode()).hexdigest()
-            return STORAGE_DIR / encoded_path
-        case DirectoryLayout.MD5_ENCODED_PAIRTREE:
-            # directories named by md5-encoding the repository path, with pairtree elements
-            encoded_path = md5(str(repo_path).encode()).hexdigest()
-            pairtree = [str(encoded_path)[n:n + 2] for n in range(0, 6, 2)]
-            return STORAGE_DIR / os.path.join(*pairtree) / encoded_path
+class LocalStorage:
+    def __init__(self, storage_dir: Path | str = '', layout: DirectoryLayout | str = DirectoryLayout.BASIC):
+        self.storage_dir = Path.cwd() / storage_dir
+        if isinstance(layout, str):
+            try:
+                self.layout = DirectoryLayout[layout.upper()]
+            except KeyError as e:
+                raise RuntimeError(f'{e} is not a recognized storage layout')
+        else:
+            self.layout = layout
+
+    def get_dir(self, repo_path: Path | str) -> Path:
+        match self.layout:
+            case DirectoryLayout.BASIC:
+                # same directory structure as the repository
+                return self.storage_dir / repo_path
+            case DirectoryLayout.MD5_ENCODED:
+                # directories named by md5-encoding the repository path
+                encoded_path = md5(str(repo_path).encode()).hexdigest()
+                return self.storage_dir / encoded_path
+            case DirectoryLayout.MD5_ENCODED_PAIRTREE:
+                # directories named by md5-encoding the repository path, with pairtree elements
+                encoded_path = md5(str(repo_path).encode()).hexdigest()
+                pairtree = [str(encoded_path)[n:n + 2] for n in range(0, 6, 2)]
+                return self.storage_dir / os.path.join(*pairtree) / encoded_path
+
+    def get_file(self, repo_path: str) -> 'MezzanineFile':
+        return MezzanineFile(self.get_dir(repo_path) / 'image.jpg')
+
+
+SUPPORTED_JPEG_MODES = ('L', 'RGB', 'CMYK')
 
 
 class MezzanineFile:
-    def __init__(self, local_path: Path = None, repo_path: str = None):
-        if local_path is not None:
-            self.path = local_path
-        elif repo_path is not None:
-            local_dir = get_local_dir(repo_path, STORAGE_LAYOUT)
-            self.path = local_dir / 'image.jpg'
-        else:
-            raise RuntimeError('Must provide one of "local_path" or "repo_path" keyword arguments')
-
-        self.lock_path = self.path.parent / '.image.jpg.lock'
+    def __init__(self, path: Path = None):
+        self.path = path
+        self.lock_path = Path(f'{self.path.parent}.lock')
 
     def __str__(self):
         return str(self.path)
@@ -72,10 +91,31 @@ class MezzanineFile:
             try:
                 img = Image.open(fh)
                 self.path.parent.mkdir(parents=True, exist_ok=True)
-                # convert to RGB if the source image is RGB-Alpha or Palette
-                if img.mode in ('RGBA', 'P'):
-                    logger.debug(f'Converting image from "{img.mode}" to "RGB"')
-                    img = img.convert('RGB')
+
+                if img.mode not in SUPPORTED_JPEG_MODES:
+                    logger.info(f'Source has mode "{img.mode}" that is not supported by JPEG; will attempt to convert')
+                    match img.mode:
+                        case 'RGBA' | 'P':
+                            # convert to RGB if the source image is RGB-Alpha or Palette
+                            logger.debug(f'Converting image from "{img.mode}" to "RGB"')
+                            img = img.convert('RGB')
+                        case 'I;16':
+                            # 16-bit TIFF needs special handling
+                            # the point function given scales the 16-bit pixel
+                            # values down to 8-bit (which is the max that JPEG
+                            # supports) by dividing by 256 (i.e., 2^8)
+                            # then the image can be safely rendered as grayscale
+                            # (mode "L") JPEG. Without the division by 256,
+                            # all the pixel values will likely be over 256,
+                            # resulting in an all-white image
+                            # see also: https://stackoverflow.com/a/43980135
+                            logger.debug(f'Converting image from "{img.mode}" to "L"')
+                            img = img.point(lambda i: i / 256).convert('L')
+                        case _:
+                            raise RuntimeError(
+                                f'Cannot convert from image mode "{img.mode}" to one of: {SUPPORTED_JPEG_MODES}'
+                            )
+
                 img.save(self.path)
             except Exception as e:
                 logger.error(str(e))
