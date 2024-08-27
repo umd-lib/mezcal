@@ -3,6 +3,7 @@ import os
 from enum import Enum
 from hashlib import md5
 from pathlib import Path
+from struct import unpack
 from threading import current_thread
 
 from PIL import Image
@@ -111,6 +112,15 @@ class MezzanineFile:
                             # see also: https://stackoverflow.com/a/43980135
                             logger.debug(f'Converting image from "{img.mode}" to "L"')
                             img = img.point(lambda i: i / 256).convert('L')
+                        case 'I;16B':
+                            # 16-bit big endian also needs special handling
+                            # in this case we are actually getting the raw bytestream
+                            # of the pixel data, unpacking it from big-endian 2-byte
+                            # integers, scaling it down from 2-byte to 1-byte pixels,
+                            # and creating a new Image object from that data
+                            # see also: https://stackoverflow.com/a/26553424
+                            logger.debug(f'Converting image from "{img.mode}" to "L"')
+                            img = convert_I16B_to_L(img)
                         case _:
                             raise RuntimeError(
                                 f'Cannot convert from image mode "{img.mode}" to one of: {SUPPORTED_JPEG_MODES}'
@@ -137,3 +147,16 @@ class MezzanineFile:
             except Exception as e:
                 logger.error(str(e))
                 raise RuntimeError('Unable to remove resource')
+
+
+def convert_I16B_to_L(img: Image) -> Image:
+    # format pattern is: big endian marker (">"), followed by
+    # the total number pixels (image width * height), followed
+    # by the datatype marked for "unsigned short", i.e., 2 bytes
+    byte_format = f'>{img.width * img.height}H'
+    # unpack the 16-bit big-endian representation of the image pixels
+    pixels = unpack(byte_format, img.tobytes())
+    # divide by 256 to scale it down to 8-bit
+    scaled_pixels = bytes((int(pixel / 256) for pixel in pixels))
+    # return a new grayscale (mode "L") image with the converted data
+    return Image.frombytes('L', (img.width, img.height), scaled_pixels, 'raw')
