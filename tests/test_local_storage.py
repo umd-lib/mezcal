@@ -71,14 +71,21 @@ def test_image_convert_mock(monkeypatch, tmp_path, mode, expected_convert_calls,
     assert mock_image.save.call_count == expected_save_calls
 
 
-def test_image_convert(datadir: Path, tmp_path: Path, caplog):
+@pytest.mark.parametrize(
+    ('filename', 'src_mode'),
+    [
+        ('16-bit.tif', 'I;16'),
+        ('16-bit-big-endian.tif', 'I;16B'),
+    ]
+)
+def test_image_convert(datadir: Path, tmp_path: Path, caplog, filename, src_mode):
     caplog.set_level(logging.DEBUG)
     local_storage = LocalStorage(tmp_path)
     file = local_storage.get_file('ex/1')
-    with (datadir / '16-bit.tif').open(mode='rb') as fh:
+    with (datadir / filename).open(mode='rb') as fh:
         file.create(fh)
     assert file.exists
-    assert 'Converting image from "I;16" to "L"' in [r.message for r in caplog.records]
+    assert f'Converting image from "{src_mode}" to "L"' in [r.message for r in caplog.records]
 
 
 def test_image_convert_failure(datadir: Path, tmp_path: Path):
