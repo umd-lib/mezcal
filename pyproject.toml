@@ -1,12 +1,12 @@
 [project]
 name = "mezcal"
 description = "Mezzanine Caching and Access Layer Web Application"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
     "codetiming",
     "filelock",
     "flask",
-    "pillow",
+    "pillow~=9.0",
     "python-dotenv",
     "requests",
     "requests-jwtauth",

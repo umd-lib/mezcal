@@ -7,7 +7,6 @@ from struct import unpack
 from threading import current_thread
 
 from PIL import Image
-from PIL.ImageOps import exif_transpose
 from codetiming import Timer
 from filelock import FileLock
 
@@ -92,12 +91,6 @@ class MezzanineFile:
             try:
                 img = Image.open(fh)
                 self.path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Rotate the image according to it's EXIF Orientation Tag
-                orientation = img.getexif().get(0x0112)
-
-                if orientation is not None and orientation != 1:
-                    img = exif_transpose(img)
 
                 if img.mode not in SUPPORTED_JPEG_MODES:
                     logger.info(f'Source has mode "{img.mode}" that is not supported by JPEG; will attempt to convert')
