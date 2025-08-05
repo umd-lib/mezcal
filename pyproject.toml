@@ -6,7 +6,7 @@ dependencies = [
     "codetiming",
     "filelock",
     "flask",
-    "pillow",
+    "pillow~=9.0",
     "python-dotenv",
     "requests",
     "requests-jwtauth",
