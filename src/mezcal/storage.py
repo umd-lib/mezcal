@@ -58,7 +58,7 @@ class LocalStorage:
                 # directories named by md5-encoding the repository path, with pairtree elements
                 encoded_path = md5(str(repo_path).encode()).hexdigest()
                 pairtree = [str(encoded_path)[n:n + 2] for n in range(0, 6, 2)]
-                return self.storage_dir / os.path.join(*pairtree) / encoded_path
+                return self.storage_dir / os.path.sep.join(pairtree) / encoded_path
 
     def get_file(self, repo_path: str) -> 'MezzanineFile':
         return MezzanineFile(self.get_dir(repo_path) / 'image.jpg')
