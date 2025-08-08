@@ -2,49 +2,83 @@ import pytest
 from PIL import Image
 from PIL.ExifTags import Base
 
-from mezcal.storage import MezzanineFile
+from mezcal.storage import MezzanineFile, logger
 
+# NOTE: the test images were created with the red pixel value of (255, 0, 0),
+# but that has gotten converted to (254, 0, 0) in the process of saving the
+# TIFF files
+R = (254, 0, 0)
+W = (255, 255, 255)
+B = (0, 0, 0)
 
 @pytest.mark.parametrize(
-    ('tiff_filename', 'orientation', 'expect_swapped_dimensions'),
+    ('src_filename', 'src_wh', 'orientation', 'expected_wh', 'expected_pixels'),
     [
-        # no Orientation tag
-        ('500x250_orientation_None.tif', None, False),
+        #('scpa-075123-0001.jpg', (3337, 2587), 6, (2587, 3337), None),
+
+        # TIFF
         # normal
-        ('500x250_orientation_1.tif', 1, False),
+        ('tif/500x250_orientation_1.tif', (500, 250), 1, (500, 250), (B, W, R, W)),
         # mirror horizontal
-        ('500x250_orientation_2.tif', 2, False),
+        ('tif/500x250_orientation_2.tif', (500, 250), 2, (500, 250), (W, B, W, R)),
         # rotate 180
-        ('500x250_orientation_3.tif', 3, False),
+        ('tif/500x250_orientation_3.tif', (500, 250), 3, (500, 250), (R, W, B, W)),
         # mirror vertical
-        ('500x250_orientation_4.tif', 4, False),
+        ('tif/500x250_orientation_4.tif', (500, 250), 4, (500, 250), (W, R, W, B)),
+
+        # NOTE: TIFF files with EXIF Orientation tags respond with the transposed
+        # values for calls to `.width` and `.height`. JPEG files do **not** behave
+        # this way.
+
         # mirror horizontal and rotate 270 CW (90 CCW)
-        ('500x250_orientation_5.tif', 5, True),
+        ('tif/500x250_orientation_5.tif', (250, 500), 5, (250, 500), (B, W, R, W)),
         # rotate 90 CW
-        ('500x250_orientation_6.tif', 6, True),
+        ('tif/500x250_orientation_6.tif', (250, 500), 6, (250, 500), (W, B, W, R)),
         # mirror horizontal and rotate 90 CW
-        ('500x250_orientation_7.tif', 7, True),
+        ('tif/500x250_orientation_7.tif', (250, 500), 7, (250, 500), (R, W, B, W)),
         # rotate 270 CW (90 CCW)
-        ('500x250_orientation_8.tif', 8, True),
+        ('tif/500x250_orientation_8.tif', (250, 500), 8, (250, 500), (W, R, W, B)),
+
+        # JPEG
+        # normal
+        ('jpg/500x250_orientation_1.jpg', (500, 250), 1, (500, 250), (B, W, R, W)),
+        # mirror horizontal
+        ('jpg/500x250_orientation_2.jpg', (500, 250), 2, (500, 250), (W, B, W, R)),
+        # rotate 180
+        ('jpg/500x250_orientation_3.jpg', (500, 250), 3, (500, 250), (R, W, B, W)),
+        # mirror vertical
+        ('jpg/500x250_orientation_4.jpg', (500, 250), 4, (500, 250), (W, R, W, B)),
+        # mirror horizontal and rotate 270 CW (90 CCW)
+        ('jpg/500x250_orientation_5.jpg', (500, 250), 5, (250, 500), (B, W, R, W)),
+        # rotate 90 CW
+        ('jpg/500x250_orientation_6.jpg', (500, 250), 6, (250, 500), (W, B, W, R)),
+        # mirror horizontal and rotate 90 CW
+        ('jpg/500x250_orientation_7.jpg', (500, 250), 7, (250, 500), (R, W, B, W)),
+        # rotate 270 CW (90 CCW)
+        ('jpg/500x250_orientation_8.jpg', (500, 250), 8, (250, 500), (W, R, W, B)),
     ]
 )
-def test_create_mezzanine_file(datadir, tiff_filename, orientation, expect_swapped_dimensions):
+def test_create_mezzanine_file(datadir, src_filename, src_wh, orientation, expected_wh, expected_pixels):
     mez = MezzanineFile(datadir / 'image.jpg')
-    with (datadir / tiff_filename).open(mode='rb') as fh:
+    with (datadir / src_filename).open(mode='rb') as fh:
         mez.create(fh)
 
-    tif_img = Image.open(datadir / tiff_filename)
-    assert len(tif_img.getexif()) != 0
-    assert tif_img.getexif().get(Base.Orientation.value) == orientation
+    src_img = Image.open(datadir / src_filename)
+    assert len(src_img.getexif()) != 0
+    assert src_img.getexif().get(Base.Orientation.value) == orientation
+    assert (src_img.width, src_img.height) == src_wh
 
     mez_img = Image.open(mez.path)
     # the mezzanine JPEG should not have EXIF data
     assert len(mez_img.getexif()) == 0
-    if expect_swapped_dimensions:
-        # because the image was rotated some odd multiple of 90 degrees,
-        # the width and height values should be swapped
-        assert mez_img.width == tif_img.height
-        assert mez_img.height == tif_img.width
-    else:
-        assert mez_img.width == tif_img.width
-        assert mez_img.height == tif_img.height
+    assert expected_wh == (mez_img.width, mez_img.height)
+
+    # check the corner pixels of the image in clockwise order,
+    # starting with the top-left (0, 0) position
+    if expected_pixels:
+        assert (
+            mez_img.getpixel((0, 0)),
+            mez_img.getpixel((mez_img.width - 1, 0)),
+            mez_img.getpixel((mez_img.width - 1, mez_img.height - 1)),
+            mez_img.getpixel((0, mez_img.height - 1)),
+        ) == expected_pixels
