@@ -16,38 +16,39 @@ Python version: 3.11
 
 ### Installation
 
-```bash
+```zsh
 git clone git@github.com:umd-lib/mezcal.git
 cd mezcal
 pyenv install --skip-existing $(cat .python-version)
 python -m venv .venv --prompt mezcal-py$(cat .python-version)
-pip install -r requirements.txt -e .
+source .venv/bin/activate
+pip install -e '.[test]'
 ```
 
 ### Configuration
 
 Create a `.env` file with the following contents:
 
-```bash
+```dotenv
 # authentication token for the origin repository
-JWT_TOKEN=...
+MEZCAL_JWT_TOKEN=...
 # base URL to the origin repository
-REPO_BASE_URL=...
+MEZCAL_REPO_BASE_URL=...
 # local storage directory
-STORAGE_DIR=image_cache
+MEZCAL_STORAGE_DIR=image_cache
 # storage directory layout
 # allowed values are "basic", "md5_encoded", and "md5_encoded_pairtree"
-STORAGE_LAYOUT=basic
+MEZCAL_STORAGE_LAYOUT=basic
 # maximum pixel size of an image;
 # default is 0, which lets PIL use its default;
 # set to a positive number to change the maximum size,
 # or set to a negative number to set no limit
-MAX_IMAGE_PIXELS=0 
+MEZCAL_MAX_IMAGE_PIXELS=0
 # enable debugging and hot reloading when run via "flask run"
 FLASK_DEBUG=1
 ```
 
-For further information about `MAX_IMAGE_PIXELS`, see the
+For further information about `MEZCAL_MAX_IMAGE_PIXELS`, see the
 [Pillow 5.0.0 Release Notes]
 
 ### Running
@@ -66,25 +67,12 @@ mezcal
 
 Either way, the application will be available at <http://localhost:5000/>
 
-### Deploying using Docker
+### Running with Docker
 
 Build the image:
 
 ```bash
 docker build -t docker.lib.umd.edu/mezcal:latest .
-```
-
-If you need to build for multiple architectures (e.g., AMD and ARM), you 
-can use `docker buildx`. This assumes you have a builder named "local" 
-configured for use with your docker buildx system, and you are logged in 
-to a Docker repository that you can push images to:
-
-```bash
-docker buildx build --builder local --platform linux/amd64,linux/arm64 \
-    -t docker.lib.umd.edu/mezcal:latest --push .
-    
-# then pull the image so it is available locally
-docker pull docker.lib.umd.edu/mezcal:latest
 ```
 
 Create a volume to store the mezzanine files:
@@ -95,21 +83,22 @@ docker volume create mezcal-cache
 
 Run the container:
 
-```bash
+```zsh
 docker run -d -p 5000:5000 \
     -v mezcal-cache:/var/cache/mezcal \
-    -e JWT_TOKEN=... \
-    -e REPO_BASE_URL=... \
-    -e STORAGE_DIR=/var/cache/mezcal \
-    -e STORAGE_LAYOUT=basic \
+    -e MEZCAL_JWT_TOKEN=... \
+    -e MEZCAL_REPO_BASE_URL=... \
+    -e MEZCAL_STORAGE_DIR=/var/cache/mezcal \
+    -e MEZCAL_STORAGE_LAYOUT=basic \
     docker.lib.umd.edu/mezcal:latest
 ```
 
 If you created a `.env` file (see [Configuration](#configuration)), you 
 can run the Docker image using that file. If you mount a `mezcal-cache` 
-volume, you should make sure that your `STORAGE_DIR` is `/var/cache/mezcal`.
+volume, you should make sure that your `MEZCAL_STORAGE_DIR` is 
+`/var/cache/mezcal`.
 
-```bash
+```zsh
 docker run -d -p 5000:5000 \
     -v mezcal-cache:/var/cache/mezcal \
     --env-file .env \

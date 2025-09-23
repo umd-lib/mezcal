@@ -2,7 +2,7 @@ import pytest
 from PIL import Image
 from PIL.ExifTags import Base
 
-from mezcal.storage import MezzanineFile, logger
+from mezcal.storage import MezzanineFile
 
 # NOTE: the test images were created with the red pixel value of (255, 0, 0),
 # but that has gotten converted to (254, 0, 0) in the process of saving the

@@ -5,6 +5,7 @@ from hashlib import md5
 from pathlib import Path
 from struct import unpack
 from threading import current_thread
+from typing import Type
 
 from PIL import Image
 from PIL.ImageOps import exif_transpose
@@ -14,7 +15,6 @@ from filelock import FileLock
 from mezcal.config import TIMER_LOG_FORMAT
 
 logger = logging.getLogger(__name__)
-MAX_IMAGE_PIXELS = int(os.environ.get('MAX_IMAGE_PIXELS', 0))
 
 
 class DirectoryLayout(Enum):
@@ -23,19 +23,8 @@ class DirectoryLayout(Enum):
     MD5_ENCODED_PAIRTREE = 3
 
 
-# set a different max pixel size than the default
-# leave MAX_IMAGE_PIXELS at 0 to use the default
-if MAX_IMAGE_PIXELS > 0:
-    # positive numbers mean set a limit
-    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
-elif MAX_IMAGE_PIXELS < 0:
-    # negative numbers mean no limit
-    logger.warning('MAX_IMAGE_PIXELS is set to "no limit". Only use with origin images from a trusted source.')
-    Image.MAX_IMAGE_PIXELS = None
-
-
 class LocalStorage:
-    def __init__(self, storage_dir: Path | str = '', layout: DirectoryLayout | str = DirectoryLayout.BASIC):
+    def __init__(self, storage_dir: Path | str = '', layout: Type[DirectoryLayout] | str = DirectoryLayout.BASIC):
         self.storage_dir = Path.cwd() / storage_dir
         if isinstance(layout, str):
             try:
