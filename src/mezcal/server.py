@@ -1,24 +1,34 @@
 import logging
-import os
 
+import click
+from dotenv import load_dotenv
 from waitress import serve
 
 from mezcal import __version__
-from mezcal.http import OriginRepository
-from mezcal.storage import LocalStorage, DirectoryLayout
 from mezcal.web import create_app
 
 logger = logging.getLogger(__name__)
 
 
-def run():
+@click.command()
+@click.option(
+    '--listen',
+    default='0.0.0.0:5000',
+    help='Address and port to listen on. Default is "0.0.0.0:5000".',
+    metavar='[ADDRESS]:PORT',
+)
+@click.version_option(__version__, '--version', '-V')
+@click.help_option('--help', '-h')
+def run(listen):
+    load_dotenv()
     server_identity = f'mezcal/{__version__}'
     logger.info(f'Starting {server_identity}')
-    app = create_app(
-        local_storage=LocalStorage(
-            storage_dir=os.environ.get('STORAGE_DIR', ''),
-            layout=DirectoryLayout[os.environ.get('STORAGE_LAYOUT', 'BASIC').upper()],
-        ),
-        origin_repo=OriginRepository(os.environ.get('REPO_BASE_URL'))
-    )
-    serve(app, listen='0.0.0.0:5000', ident=server_identity)
+    try:
+        serve(
+            app=create_app(),
+            listen=listen,
+            ident=server_identity,
+        )
+    except (OSError, RuntimeError) as e:
+        logger.error(f'Exiting: {e}')
+        raise SystemExit(1) from e

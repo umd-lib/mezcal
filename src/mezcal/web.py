@@ -1,9 +1,11 @@
 import logging
 import os
+from collections.abc import Mapping
 from http import HTTPStatus
 from threading import current_thread
-from typing import Optional
+from typing import Optional, Any
 
+from PIL import Image
 from codetiming import Timer
 from filelock import Timeout
 from flask import Flask, send_file, request, url_for, redirect, abort
@@ -12,7 +14,7 @@ from requests_jwtauth import HTTPBearerAuth, JWTSecretAuth
 
 from mezcal.config import TIMER_LOG_FORMAT
 from mezcal.http import OriginRepository, NotAnImageError, RepositoryAuthType
-from mezcal.storage import LocalStorage
+from mezcal.storage import LocalStorage, DirectoryLayout
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s:%(name)s:%(threadName)s:%(message)s')
 logging.getLogger('PIL').setLevel(logging.INFO)
@@ -21,23 +23,23 @@ logging.getLogger('filelock').setLevel(logging.INFO)
 LOCK_TIMEOUT = 30
 
 
-def get_authenticator(authentication_type: RepositoryAuthType) -> Optional[AuthBase]:
+def get_authenticator(authentication_type: RepositoryAuthType, config: Mapping[str, Any]) -> Optional[AuthBase]:
     """Return a new Requests authenticator as determined by the authentication_type parameter.
 
-    Configuration values for the authenticators, if any, are taken from environment variables.
-    Raises a RuntimeError if a required environment variable is not set."""
+    Configuration values for the authenticators, if any, are taken from the given `config`
+    mapping. Raises a `RuntimeError` if a required key is not set in `config`."""
 
     try:
         match authentication_type:
             case RepositoryAuthType.NONE:
                 return None
             case RepositoryAuthType.BASIC:
-                return HTTPBasicAuth(os.environ['REPO_USERNAME'], os.environ['REPO_PASSWORD'])
+                return HTTPBasicAuth(config['REPO_USERNAME'], config['REPO_PASSWORD'])
             case RepositoryAuthType.JWT_TOKEN:
-                return HTTPBearerAuth(os.environ['JWT_TOKEN'])
+                return HTTPBearerAuth(config['JWT_TOKEN'])
             case RepositoryAuthType.JWT_SECRET:
                 return JWTSecretAuth(
-                    secret=os.environ['JWT_SECRET'],
+                    secret=config['JWT_SECRET'],
                     claims={
                         'sub': 'mezcal',
                         'iss': 'fcrepo',
@@ -48,8 +50,27 @@ def get_authenticator(authentication_type: RepositoryAuthType) -> Optional[AuthB
         raise RuntimeError(f'Environment variable {e} is not set') from e
 
 
-def create_app(local_storage: LocalStorage, origin_repo: OriginRepository) -> Flask:
+def create_app() -> Flask:
     app = Flask(__name__)
+    app.config.from_prefixed_env('MEZCAL')
+
+    max_image_pixels = int(app.config.get('MAX_IMAGE_PIXELS', 0))
+    # set a different max pixel size than the default
+    # leave MAX_IMAGE_PIXELS at 0 to use the default
+    if max_image_pixels > 0:
+        # positive numbers mean set a limit
+        Image.MAX_IMAGE_PIXELS = max_image_pixels
+    elif max_image_pixels < 0:
+        # negative numbers mean no limit
+        app.logger.warning('MAX_IMAGE_PIXELS is set to "no limit". Only use with origin images from a trusted source.')
+        Image.MAX_IMAGE_PIXELS = None
+
+    layout_name = app.config.get('STORAGE_LAYOUT', 'BASIC').upper()
+    local_storage = LocalStorage(
+        storage_dir=app.config.get('STORAGE_DIR', ''),
+        layout=DirectoryLayout[layout_name],
+    )
+    origin_repo = OriginRepository(app.config.get('REPO_BASE_URL'))
 
     @app.route('/')
     def home():
@@ -78,7 +99,7 @@ def create_app(local_storage: LocalStorage, origin_repo: OriginRepository) -> Fl
                         app.logger.debug(f'No local copy exists for /{repo_path} (local file path: {local_file})')
                         auth_type = RepositoryAuthType[os.environ.get("AUTH_TYPE", "NONE")]
                         try:
-                            response = origin_repo.get(repo_path, auth=get_authenticator(auth_type))
+                            response = origin_repo.get(repo_path, auth=get_authenticator(auth_type, app.config))
                             local_file.create(response.raw)
                         except NotAnImageError:
                             abort(HTTPStatus.BAD_REQUEST, description='Requested resource is not an image')
