@@ -5,15 +5,16 @@ from hashlib import md5
 from pathlib import Path
 from struct import unpack
 from threading import current_thread
+from typing import Type
 
 from PIL import Image
+from PIL.ImageOps import exif_transpose
 from codetiming import Timer
 from filelock import FileLock
 
 from mezcal.config import TIMER_LOG_FORMAT
 
 logger = logging.getLogger(__name__)
-MAX_IMAGE_PIXELS = int(os.environ.get('MAX_IMAGE_PIXELS', 0))
 
 
 class DirectoryLayout(Enum):
@@ -22,19 +23,8 @@ class DirectoryLayout(Enum):
     MD5_ENCODED_PAIRTREE = 3
 
 
-# set a different max pixel size than the default
-# leave MAX_IMAGE_PIXELS at 0 to use the default
-if MAX_IMAGE_PIXELS > 0:
-    # positive numbers mean set a limit
-    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
-elif MAX_IMAGE_PIXELS < 0:
-    # negative numbers mean no limit
-    logger.warning('MAX_IMAGE_PIXELS is set to "no limit". Only use with origin images from a trusted source.')
-    Image.MAX_IMAGE_PIXELS = None
-
-
 class LocalStorage:
-    def __init__(self, storage_dir: Path | str = '', layout: DirectoryLayout | str = DirectoryLayout.BASIC):
+    def __init__(self, storage_dir: Path | str = '', layout: Type[DirectoryLayout] | str = DirectoryLayout.BASIC):
         self.storage_dir = Path.cwd() / storage_dir
         if isinstance(layout, str):
             try:
@@ -57,7 +47,7 @@ class LocalStorage:
                 # directories named by md5-encoding the repository path, with pairtree elements
                 encoded_path = md5(str(repo_path).encode()).hexdigest()
                 pairtree = [str(encoded_path)[n:n + 2] for n in range(0, 6, 2)]
-                return self.storage_dir / os.path.join(*pairtree) / encoded_path
+                return self.storage_dir / os.path.sep.join(pairtree) / encoded_path
 
     def get_file(self, repo_path: str) -> 'MezzanineFile':
         return MezzanineFile(self.get_dir(repo_path) / 'image.jpg')
@@ -91,6 +81,8 @@ class MezzanineFile:
             try:
                 img = Image.open(fh)
                 self.path.parent.mkdir(parents=True, exist_ok=True)
+
+                exif_transpose(img, in_place=True)
 
                 if img.mode not in SUPPORTED_JPEG_MODES:
                     logger.info(f'Source has mode "{img.mode}" that is not supported by JPEG; will attempt to convert')
