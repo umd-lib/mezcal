@@ -3,6 +3,7 @@ name = "mezcal"
 description = "Mezzanine Caching and Access Layer Web Application"
 version = "1.2.3"
 dependencies = [
+    "boto3",
     "click",
     "codetiming",
     "filelock",
@@ -16,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
+    "moto[s3]",
     "pycodestyle",
     "pytest",
     "pytest-cov",

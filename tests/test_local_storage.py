@@ -110,6 +110,17 @@ def test_image_failure(monkeypatch, tmp_path):
         assert str(e) == 'Unable to create mezzanine image'
 
 
+def test_read(tmp_path, datadir):
+    local_storage = LocalStorage(tmp_path)
+    file = local_storage.get_file('bar/1')
+    with open(datadir / 'sample.tif', 'rb') as fh:
+        file.create(fh)
+    result = file.read()
+    # JPEG files begin with the SOI marker ff d8 ff
+    assert result.read(3) == b'\xff\xd8\xff'
+    result.close()
+
+
 def test_create_and_delete(tmp_path, datadir):
     local_storage = LocalStorage(tmp_path)
     file = local_storage.get_file('bar/1')
