@@ -67,6 +67,7 @@ def create_app() -> Flask:
 
     layout_name = app.config.get('STORAGE_LAYOUT', 'BASIC').upper()
     backend = app.config.get('STORAGE_BACKEND', 'local').lower()
+    presigned_url_expiry = int(app.config.get('S3_PRESIGNED_URL_EXPIRY', 3600))
     if backend == 's3':
         bucket = app.config.get('S3_BUCKET')
         if not bucket:
@@ -122,6 +123,9 @@ def create_app() -> Flask:
                         app.logger.debug(f'Saved {cached_file} for /{repo_path}')
 
                     app.logger.info(f'Sending file {cached_file} for /{repo_path}')
+                    url = cached_file.presigned_url(presigned_url_expiry)
+                    if url:
+                        return redirect(url)
                     return send_file(cached_file.read(), mimetype='image/jpeg')
 
             except Timeout:

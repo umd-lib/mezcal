@@ -131,6 +131,10 @@ class MezzanineFile:
     def read(self):
         return open(self.path, 'rb')
 
+    def presigned_url(self, expiry_seconds: int = 3600) -> None:
+        """Local files are served directly; no presigned URL is used."""
+        return None
+
     def create(self, fh):
         with Timer(
             name=f'create cached image {self.path} in {current_thread().name}',
@@ -213,6 +217,14 @@ class S3MezzanineFile:
     def read(self) -> io.BytesIO:
         response = self._client.get_object(Bucket=self._bucket, Key=self._key)
         return io.BytesIO(response['Body'].read())
+
+    def presigned_url(self, expiry_seconds: int = 3600) -> str:
+        """Return a presigned GET URL for this S3 object, valid for expiry_seconds."""
+        return self._client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': self._bucket, 'Key': self._key},
+            ExpiresIn=expiry_seconds,
+        )
 
     def create(self, fh):
         with Timer(

@@ -186,6 +186,18 @@ def test_read(s3):
     assert result.read() == content
 
 
+# --- presigned_url ---
+
+def test_presigned_url(s3):
+    s3.put_object(Bucket=BUCKET, Key='bar/1/image.jpg', Body=b'data', ContentType='image/jpeg')
+    storage = S3Storage(bucket=BUCKET)
+    f = storage.get_file('bar/1')
+    url = f.presigned_url(expiry_seconds=300)
+    assert isinstance(url, str)
+    assert url.startswith('https://')
+    assert 'bar/1/image.jpg' in url
+
+
 # --- round-trip ---
 
 def test_create_and_delete(s3, tmp_path):
