@@ -3,3 +3,4 @@
 .venv
 image_cache
 .coverage
+__pycache__/
