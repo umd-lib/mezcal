@@ -1,53 +1,65 @@
 import logging
-import os
 from collections.abc import Mapping
 from http import HTTPStatus
 from threading import current_thread
-from typing import Optional, Any
+from typing import Any
 
 from PIL import Image
 from codetiming import Timer
 from filelock import Timeout
 from flask import Flask, send_file, request, url_for, redirect, abort
+from plastron.client import Client, Endpoint
+from plastron.client.proxied import ProxiedClient
 from requests.auth import HTTPBasicAuth, AuthBase
 from requests_jwtauth import HTTPBearerAuth, JWTSecretAuth
 
 from mezcal.config import TIMER_LOG_FORMAT
-from mezcal.http import OriginRepository, NotAnImageError, RepositoryAuthType
+from mezcal.http import OriginRepository, NotAnImageError
 from mezcal.storage import LocalStorage, DirectoryLayout
 
 logging.basicConfig(level=logging.DEBUG, format='%(levelname)s:%(name)s:%(threadName)s:%(message)s')
 logging.getLogger('PIL').setLevel(logging.INFO)
 logging.getLogger('filelock').setLevel(logging.INFO)
 
+logger = logging.getLogger(__name__)
+
 LOCK_TIMEOUT = 30
 
 
-def get_authenticator(authentication_type: RepositoryAuthType, config: Mapping[str, Any]) -> Optional[AuthBase]:
-    """Return a new Requests authenticator as determined by the authentication_type parameter.
+def get_authenticator(config: Mapping[str, Any]) -> AuthBase | None:
+    if 'FCREPO_JWT_SECRET' in config:
+        return JWTSecretAuth(
+            secret=config['FCREPO_JWT_SECRET'],
+            claims={'sub': 'mezcal', 'iss': 'fcrepo', 'role': 'fedoraAdmin'},
+        )
 
-    Configuration values for the authenticators, if any, are taken from the given `config`
-    mapping. Raises a `RuntimeError` if a required key is not set in `config`."""
+    if 'FCREPO_JWT_TOKEN' in config:
+        return HTTPBearerAuth(config['FCREPO_JWT_TOKEN'])
 
+    if 'FCREPO_USERNAME' in config and 'FCREPO_PASSWORD' in config:
+        return HTTPBasicAuth(config['FCREPO_USERNAME'], config['FCREPO_PASSWORD'])
+
+    return None
+
+
+def get_client(config: Mapping[str, Any]) -> Client:
     try:
-        match authentication_type:
-            case RepositoryAuthType.NONE:
-                return None
-            case RepositoryAuthType.BASIC:
-                return HTTPBasicAuth(config['REPO_USERNAME'], config['REPO_PASSWORD'])
-            case RepositoryAuthType.JWT_TOKEN:
-                return HTTPBearerAuth(config['JWT_TOKEN'])
-            case RepositoryAuthType.JWT_SECRET:
-                return JWTSecretAuth(
-                    secret=config['JWT_SECRET'],
-                    claims={
-                        'sub': 'mezcal',
-                        'iss': 'fcrepo',
-                        'role': 'fedoraAdmin',
-                    }
-                )
+        endpoint = Endpoint(config['FCREPO_ENDPOINT'])
+        auth = get_authenticator(config)
+
+        if 'FCREPO_ORIGIN' in config:
+            return ProxiedClient(
+                endpoint=endpoint,
+                origin_endpoint=Endpoint(config['FCREPO_ORIGIN']),
+                auth=auth,
+            )
+        else:
+            return Client(
+                endpoint=endpoint,
+                auth=auth,
+            )
     except KeyError as e:
-        raise RuntimeError(f'Environment variable {e} is not set') from e
+        raise RuntimeError(f'Configuration is missing a required key: {e}')
 
 
 def create_app() -> Flask:
@@ -70,7 +82,7 @@ def create_app() -> Flask:
         storage_dir=app.config.get('STORAGE_DIR', ''),
         layout=DirectoryLayout[layout_name],
     )
-    origin_repo = OriginRepository(app.config.get('REPO_BASE_URL'))
+    origin_repo = OriginRepository(get_client(app.config))
 
     @app.route('/')
     def home():
@@ -78,11 +90,12 @@ def create_app() -> Flask:
             return '<form><label>Repository URL: <input name="url" size="120"/></label><button>Fetch</button></form>'
 
         url = request.args['url']
-        if url.startswith(origin_repo.base_url):
-            repo_path = url[len(origin_repo.base_url):]
+        endpoint = origin_repo.client.endpoint.url
+        if url.startswith(endpoint):
+            repo_path = url.removeprefix(endpoint).removeprefix('/')
             return redirect(url_for('resource', repo_path=repo_path))
         else:
-            app.logger.error(f'URL {url} does not start with {origin_repo.base_url}')
+            app.logger.error(f'URL {url} does not start with {endpoint}')
             abort(HTTPStatus.NOT_FOUND)
 
     @app.route('/images/<path:repo_path>')
@@ -97,9 +110,8 @@ def create_app() -> Flask:
                 with local_file.lock.acquire(timeout=LOCK_TIMEOUT):
                     if not local_file.exists:
                         app.logger.debug(f'No local copy exists for /{repo_path} (local file path: {local_file})')
-                        auth_type = RepositoryAuthType[os.environ.get("AUTH_TYPE", "NONE")]
                         try:
-                            response = origin_repo.get(repo_path, auth=get_authenticator(auth_type, app.config))
+                            response = origin_repo.get(f'/{repo_path}')
                             local_file.create(response.raw)
                         except NotAnImageError:
                             abort(HTTPStatus.BAD_REQUEST, description='Requested resource is not an image')

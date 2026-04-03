@@ -1,35 +1,27 @@
 import logging
-from enum import Enum
 from threading import current_thread
 
 import requests
 from codetiming import Timer
+from plastron.client import Client
 
 from mezcal.config import TIMER_LOG_FORMAT
 
 logger = logging.getLogger(__name__)
 
 
-class RepositoryAuthType(Enum):
-    NONE = 0
-    BASIC = 1
-    JWT_TOKEN = 2
-    JWT_SECRET = 3
-
-
 class OriginRepository:
-    def __init__(self, base_url: str):
-        self.base_url = base_url
+    def __init__(self, client: Client):
+        self.client = client
 
-    def get(self, repo_path: str, auth=None) -> requests.Response:
+    def get(self, repo_path: str) -> requests.Response:
         with Timer(
             name=f'request origin image {repo_path} in {current_thread().name}',
             logger=logger.info,
             text=TIMER_LOG_FORMAT
         ):
-            url = self.base_url + repo_path
-            logger.debug(f'Requesting from {url}')
-            response = requests.get(url, auth=auth, stream=True)
+            url = f'{self.client.endpoint.url}{repo_path}'
+            response = self.client.get(url, stream=True)
             if response.ok:
                 logger.debug(f'Received {response.status_code} {response.reason} response')
                 logger.debug(f'Response headers: {response.headers}')

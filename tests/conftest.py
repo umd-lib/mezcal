@@ -5,7 +5,7 @@ from mezcal.web import create_app
 
 @pytest.fixture()
 def test_client(datadir, monkeypatch):
-    monkeypatch.setenv('MEZCAL_REPO_BASE_URL', 'http://example.org/repo/')
+    monkeypatch.setenv('MEZCAL_FCREPO_ENDPOINT', 'http://example.org/repo')
     monkeypatch.setenv('MEZCAL_STORAGE_DIR', str(datadir))
     flask_app = create_app()
 

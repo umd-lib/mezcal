@@ -8,6 +8,7 @@ dependencies = [
     "filelock",
     "flask",
     "pillow~=11.0",
+    "plastron-client>=4.7.0",
     "python-dotenv",
     "requests",
     "requests-jwtauth",

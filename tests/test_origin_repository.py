@@ -2,6 +2,7 @@ import pytest
 import requests
 
 from mezcal.http import OriginRepository, NotAnImageError
+from mezcal.web import get_client
 
 
 class MockOKResponse:
@@ -30,16 +31,19 @@ def mock_request(response):
     return _request
 
 
-def test_not_an_image(monkeypatch):
-    monkeypatch.setattr(requests, 'get', mock_request(response=NonImageResponse()))
-    repo = OriginRepository('http://example.com/repo')
+@pytest.fixture
+def repo():
+    return OriginRepository(get_client({'FCREPO_ENDPOINT': 'http://example.com/repo'}))
+
+
+def test_not_an_image(monkeypatch, repo):
+    monkeypatch.setattr(repo.client, 'get', mock_request(response=NonImageResponse()))
     with pytest.raises(NotAnImageError):
         repo.get('/foo')
 
 
-def test_image(monkeypatch):
-    monkeypatch.setattr(requests, 'get', mock_request(response=ImageResponse()))
-    repo = OriginRepository('http://example.com/repo')
+def test_image(monkeypatch, repo):
+    monkeypatch.setattr(repo.client, 'get', mock_request(response=ImageResponse()))
     response = repo.get('/foo')
     assert response.ok
     assert response.status_code == 200
@@ -47,9 +51,8 @@ def test_image(monkeypatch):
     assert response.headers['Content-Type'] == 'image/tiff'
 
 
-def test_origin_not_ok_response(monkeypatch):
+def test_origin_not_ok_response(monkeypatch, repo):
     monkeypatch.setattr(requests, 'get', mock_request(response=MockBadRequestResponse()))
-    repo = OriginRepository('http://example.com/repo')
     with pytest.raises(RuntimeError) as e:
         repo.get('/foo')
         assert str(e) == 'Unable to retrieve resource'

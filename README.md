@@ -31,9 +31,9 @@ Create a `.env` file with the following contents:
 
 ```dotenv
 # authentication token for the origin repository
-MEZCAL_JWT_TOKEN=...
+MEZCAL_FCREPO_JWT_TOKEN=...
 # base URL to the origin repository
-MEZCAL_REPO_BASE_URL=...
+MEZCAL_FCREPO_ENDPOINT=...
 # local storage directory
 MEZCAL_STORAGE_DIR=image_cache
 # storage directory layout
@@ -86,8 +86,8 @@ Run the container:
 ```zsh
 docker run -d -p 5000:5000 \
     -v mezcal-cache:/var/cache/mezcal \
-    -e MEZCAL_JWT_TOKEN=... \
-    -e MEZCAL_REPO_BASE_URL=... \
+    -e MEZCAL_FCREPO_JWT_TOKEN=... \
+    -e MEZCAL_FCREPO_ENDPOINT=... \
     -e MEZCAL_STORAGE_DIR=/var/cache/mezcal \
     -e MEZCAL_STORAGE_LAYOUT=basic \
     docker.lib.umd.edu/mezcal:latest
