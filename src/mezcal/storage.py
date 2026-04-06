@@ -5,7 +5,6 @@ from hashlib import md5
 from pathlib import Path
 from struct import unpack
 from threading import current_thread
-from typing import Type
 
 from PIL import Image
 from PIL.ImageOps import exif_transpose
@@ -24,7 +23,7 @@ class DirectoryLayout(Enum):
 
 
 class LocalStorage:
-    def __init__(self, storage_dir: Path | str = '', layout: Type[DirectoryLayout] | str = DirectoryLayout.BASIC):
+    def __init__(self, storage_dir: Path | str = '', layout: DirectoryLayout | str = DirectoryLayout.BASIC):
         self.storage_dir = Path.cwd() / storage_dir
         if isinstance(layout, str):
             try:
@@ -55,8 +54,9 @@ class LocalStorage:
 
 SUPPORTED_JPEG_MODES = ('L', 'RGB', 'CMYK')
 
+
 class MezzanineFile:
-    def __init__(self, path: Path = None):
+    def __init__(self, path: Path):
         self.path = path
         self.lock_path = Path(f'{self.path.parent}.lock')
 
@@ -140,7 +140,7 @@ class MezzanineFile:
                 raise RuntimeError('Unable to remove resource')
 
 
-def convert_I16B_to_L(img: Image) -> Image:
+def convert_I16B_to_L(img: Image.Image) -> Image.Image:
     # format pattern is: big endian marker (">"), followed by
     # the total number pixels (image width * height), followed
     # by the datatype marked for "unsigned short", i.e., 2 bytes

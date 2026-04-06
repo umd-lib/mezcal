@@ -4,6 +4,7 @@ from mezcal.web import create_app
 
 
 def test_max_image_pixels(monkeypatch):
+    monkeypatch.setenv('MEZCAL_FCREPO_ENDPOINT', 'http://example.com/fcrepo/rest')
     monkeypatch.setenv('MEZCAL_MAX_IMAGE_PIXELS', '1024')
     app = create_app()
     assert app.config['MAX_IMAGE_PIXELS'] == 1024
@@ -11,6 +12,7 @@ def test_max_image_pixels(monkeypatch):
 
 
 def test_max_image_pixels_default(monkeypatch):
+    monkeypatch.setenv('MEZCAL_FCREPO_ENDPOINT', 'http://example.com/fcrepo/rest')
     original_max_pixels = PIL.Image.MAX_IMAGE_PIXELS
     monkeypatch.setenv('MEZCAL_MAX_IMAGE_PIXELS', '0')
     app = create_app()
@@ -19,6 +21,7 @@ def test_max_image_pixels_default(monkeypatch):
 
 
 def test_max_image_pixels_no_limit(monkeypatch):
+    monkeypatch.setenv('MEZCAL_FCREPO_ENDPOINT', 'http://example.com/fcrepo/rest')
     monkeypatch.setenv('MEZCAL_MAX_IMAGE_PIXELS', '-1')
     app = create_app()
     assert app.config['MAX_IMAGE_PIXELS'] == -1
