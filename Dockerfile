@@ -1,4 +1,4 @@
-FROM python:3.11.2-slim
+FROM python:3.14.9-slim
 
 EXPOSE 5000
 VOLUME /var/mezcal/images
